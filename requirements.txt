@@ -1,0 +1,6 @@
+PyMuPDF
+pandas
+Pillow
+openpyxl
+xlrd
+numpy
