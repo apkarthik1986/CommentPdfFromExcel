@@ -56,22 +56,23 @@ def compute_text_size_points(text, fontsize, ttf_candidates=None, pdf_fontname="
     Adds a small safety multiplier to the measured width to avoid clipping in viewers that may slightly
     vary metrics.
     """
-    # 3) heuristic defaults
-    approx_w = max(10.0, len(text) * (fontsize * 0.55))
-    approx_h = max(12.0, fontsize * 1.15)
-    approx_ascent = approx_h * 0.75
-    approx_descent = approx_h * 0.25
+    # 3) heuristic defaults (conservative estimates to avoid clipping)
+    approx_w = max(10.0, len(text) * (fontsize * 0.6))
+    approx_h = max(12.0, fontsize * 1.2)
+    approx_ascent = approx_h * 0.8
+    approx_descent = approx_h * 0.3
 
     # 1) try fitz.get_text_length with pdf_fontname (preferred)
     try:
         # fitz.get_text_length returns width in points for given fontsize and font name
-        w = fitz.get_text_length(text, fontsize, pdf_fontname)
+        # Correct parameter order: get_text_length(text, fontname, fontsize, encoding)
+        w = fitz.get_text_length(text, fontname=pdf_fontname, fontsize=fontsize)
         if w and w > 0:
-            # add a tiny safety margin (2%) to avoid clipping when viewer metrics differ slightly
-            w = float(w) * 1.02
-            h = float(max(12.0, fontsize * 1.15))
-            ascent = fontsize * 0.75
-            descent = fontsize * 0.25
+            # add a safety margin (5%) to avoid clipping when viewer metrics differ slightly
+            w = float(w) * 1.05
+            h = float(max(12.0, fontsize * 1.2))
+            ascent = fontsize * 0.8
+            descent = fontsize * 0.3
             return float(w), h, ascent, descent
     except Exception:
         # not available or failed -> continue to Pillow fallback
@@ -109,7 +110,7 @@ def compute_text_size_points(text, fontsize, ttf_candidates=None, pdf_fontname="
                 ascent = h_px * 0.75
                 descent = h_px * 0.25
             # safety margin
-            return float(w_px) * 1.02, float(h_px), ascent, descent
+            return float(w_px) * 1.05, float(h_px), ascent, descent
         except Exception:
             pass
 
@@ -158,9 +159,9 @@ def update_pdf_with_comments(
                         comment, font_size, ttf_candidates, pdf_fontname
                     )
 
-                    # horizontal padding (small but ensures no clipping)
-                    padding_x = max(6.0, font_size * 0.45)
-                    padding_y = max(2.0, font_size * 0.20)
+                    # horizontal and vertical padding to ensure no clipping
+                    padding_x = max(8.0, font_size * 0.5)
+                    padding_y = max(4.0, font_size * 0.25)
 
                     width = text_w_pts + 2.0 * padding_x
                     measured_text_height = ascent_pts + descent_pts if (ascent_pts and descent_pts) else text_h_pts
@@ -339,8 +340,8 @@ def build_annotations_for_preview(page, df, distance, font_family="DejaVuSans", 
                 text_w_pts, text_h_pts, ascent_pts, descent_pts = compute_text_size_points(
                     comment, font_size, ttf_candidates, pdf_fontname="helv"
                 )
-                padding_x = max(6.0, font_size * 0.45)
-                padding_y = max(2.0, font_size * 0.20)
+                padding_x = max(8.0, font_size * 0.5)
+                padding_y = max(4.0, font_size * 0.25)
                 width = text_w_pts + 2.0 * padding_x
                 measured_text_height = ascent_pts + descent_pts if (ascent_pts and descent_pts) else text_h_pts
                 height = max(12.0, measured_text_height + 2.0 * padding_y)
