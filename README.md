@@ -1,4 +1,4 @@
-# CommentPdfFromExcel
+# Comment Pdf From Excel
 
 A GUI-based utility to add comments from an Excel file to PDF documents. The tool searches for specific tags in PDF files and adds annotations with corresponding comments at those locations.
 
