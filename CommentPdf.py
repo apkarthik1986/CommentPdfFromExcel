@@ -92,9 +92,15 @@ def compute_text_size_points(text, fontsize, ttf_candidates=None, pdf_fontname="
                     font = None
         if font is None:
             try:
-                font = ImageFont.truetype("DejaVuSans.ttf", size=int(fontsize))
+                font = ImageFont.truetype("arial.ttf", size=int(fontsize))
             except Exception:
-                font = ImageFont.load_default()
+                try:
+                    font = ImageFont.truetype("Arial.ttf", size=int(fontsize))
+                except Exception:
+                    try:
+                        font = ImageFont.truetype("DejaVuSans.ttf", size=int(fontsize))
+                    except Exception:
+                        font = ImageFont.load_default()
 
         try:
             # create a temp image large enough to measure
@@ -138,7 +144,7 @@ def update_pdf_with_comments(
         log_func(f"Processing: {os.path.basename(pdf_path)}")
 
     # Map to PDF font resource and ttf candidates for measurement/preview
-    pdf_fontname, ttf_candidates = PDF_FONT_MAP.get(font_family, ("helv", ["DejaVuSans.ttf"]))
+    pdf_fontname, ttf_candidates = PDF_FONT_MAP.get(font_family, ("helv", ["arial.ttf", "Arial.ttf"]))
 
     doc = fitz.open(pdf_path)
 
@@ -461,7 +467,7 @@ def show_preview_snippet(parent, pdf_path, df, subject, distance, font_family, f
     draw = ImageDraw.Draw(snippet)
 
     # Load font at scaled size so preview shows correct visual size
-    _, ttf_candidates = PDF_FONT_MAP.get(font_family, ("helv", ["DejaVuSans.ttf"]))
+    _, ttf_candidates = PDF_FONT_MAP.get(font_family, ("helv", ["arial.ttf", "Arial.ttf"]))
     font_obj = None
     for fn in ttf_candidates:
         try:
@@ -471,9 +477,15 @@ def show_preview_snippet(parent, pdf_path, df, subject, distance, font_family, f
             font_obj = None
     if font_obj is None:
         try:
-            font_obj = ImageFont.truetype("DejaVuSans.ttf", size=int(font_size * zoom))
+            font_obj = ImageFont.truetype("arial.ttf", size=int(font_size * zoom))
         except Exception:
-            font_obj = ImageFont.load_default()
+            try:
+                font_obj = ImageFont.truetype("Arial.ttf", size=int(font_size * zoom))
+            except Exception:
+                try:
+                    font_obj = ImageFont.truetype("DejaVuSans.ttf", size=int(font_size * zoom))
+                except Exception:
+                    font_obj = ImageFont.load_default()
 
     r_ax0 = x0 - cx0
     r_ay0 = y0 - cy0
@@ -746,7 +758,7 @@ class App(Frame):
             return
 
         subj = self.subject_entry.get().strip() or "Comment"
-        ffamily = self.font_family.get() or "DejaVuSans"
+        ffamily = self.font_family.get() or "Arial"
 
         self.disable_ui()
         self.append_log("Starting processing...")
@@ -816,7 +828,7 @@ class App(Frame):
         except Exception:
             fsize = 12
 
-        ffamily = self.font_family.get() or "DejaVuSans"
+        ffamily = self.font_family.get() or "Arial"
         subj = self.subject_entry.get().strip() or "Comment"
 
         self.append_log(f"Showing preview snippet for: {os.path.basename(sample_pdf)}")
