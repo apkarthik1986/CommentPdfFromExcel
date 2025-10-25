@@ -127,7 +127,7 @@ def update_pdf_with_comments(
     subject="Comment",
     distance=10,
     log_func=None,
-    font_family="DejaVuSans",
+    font_family="Arial",
     font_size=12,
 ):
     """
@@ -264,7 +264,7 @@ def process_files(
     subject="Comment",
     distance=10,
     log_func=None,
-    font_family="DejaVuSans",
+    font_family="Arial",
     font_size=12,
 ):
     try:
@@ -327,7 +327,7 @@ def get_text_size(draw, text, font):
         return (len(text) * 7, int(getattr(font, "size", 12)))
 
 
-def build_annotations_for_preview(page, df, distance, font_family="DejaVuSans", font_size=12):
+def build_annotations_for_preview(page, df, distance, font_family="Arial", font_size=12):
     annotations = []
     content = page.get_text("text")
 
