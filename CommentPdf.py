@@ -1,10 +1,10 @@
 import fitz  # PyMuPDF
 import pandas as pd
 import os
-from tkinter import Tk, messagebox
+from tkinter import Tk, messagebox, simpledialog, Label, Entry, Button, Frame, TOP, BOTH, LEFT, RIGHT
 from tkinter.filedialog import askopenfilename, askdirectory, asksaveasfilename
 
-def update_pdf_with_comments(pdf_path, excel_path, output_pdf_path):
+def update_pdf_with_comments(pdf_path, excel_path, output_pdf_path, subject="Comment"):
     # Read the Excel file
     df = pd.read_excel(excel_path)
     df['tag'] = df['tag'].astype(str)
@@ -41,13 +41,13 @@ def update_pdf_with_comments(pdf_path, excel_path, output_pdf_path):
                         align=fitz.TEXT_ALIGN_LEFT
                     )
                     annot.set_border(width=0.5, dashes=[2])
-                    annot.set_info({"subject": "tag2"})
+                    annot.set_info({"subject": subject})
                     annot.update()
 
     doc.save(output_pdf_path)
     doc.close()
 
-def process_folder(folder_path, excel_path, output_folder):
+def process_folder(folder_path, excel_path, output_folder, subject="Comment"):
     # Create output folder if it doesn't exist
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
@@ -64,12 +64,24 @@ def process_folder(folder_path, excel_path, output_folder):
             pdf_path = os.path.join(folder_path, pdf_file)
             output_pdf_path = os.path.join(output_folder, f"updated_{pdf_file}")
             
-            update_pdf_with_comments(pdf_path, excel_path, output_pdf_path)
+            update_pdf_with_comments(pdf_path, excel_path, output_pdf_path, subject)
         except Exception as e:
             messagebox.showerror("Error", f"Failed to process {pdf_file}:\n{e}")
             continue
     
     messagebox.showinfo("Success", f"Processed {len(pdf_files)} PDF files.\nSaved in: {output_folder}")
+
+def get_comment_subject():
+    """Show a dialog to get comment subject from user."""
+    subject = simpledialog.askstring(
+        "Comment Subject",
+        "Enter the comment subject:\n(Leave empty for default 'Comment')",
+        initialvalue="Comment"
+    )
+    # If user cancels or provides empty string, use default
+    if not subject or subject.strip() == "":
+        subject = "Comment"
+    return subject
 
 def main():
     root = Tk()
@@ -91,7 +103,10 @@ def main():
         if not output_folder:
             return
 
-        process_folder(folder_path, excel_path, output_folder)
+        # Ask for comment subject
+        subject = get_comment_subject()
+
+        process_folder(folder_path, excel_path, output_folder, subject)
         
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred:\n{e}")
