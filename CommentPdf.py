@@ -144,7 +144,7 @@ def update_pdf_with_comments(
         log_func(f"Processing: {os.path.basename(pdf_path)}")
 
     # Map to PDF font resource and ttf candidates for measurement/preview
-    pdf_fontname, ttf_candidates = PDF_FONT_MAP.get(font_family, ("helv", ["arial.ttf", "Arial.ttf"]))
+    pdf_fontname, ttf_candidates = PDF_FONT_MAP.get(font_family, ("helv", ["arial.ttf", "Arial.ttf", "DejaVuSans.ttf"]))
 
     doc = fitz.open(pdf_path)
 
@@ -467,7 +467,7 @@ def show_preview_snippet(parent, pdf_path, df, subject, distance, font_family, f
     draw = ImageDraw.Draw(snippet)
 
     # Load font at scaled size so preview shows correct visual size
-    _, ttf_candidates = PDF_FONT_MAP.get(font_family, ("helv", ["arial.ttf", "Arial.ttf"]))
+    _, ttf_candidates = PDF_FONT_MAP.get(font_family, ("helv", ["arial.ttf", "Arial.ttf", "DejaVuSans.ttf"]))
     font_obj = None
     for fn in ttf_candidates:
         try:
