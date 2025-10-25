@@ -1,79 +1,101 @@
 # CommentPdfFromExcel
 
-A small utility to extract comments/notes from Excel workbooks (.xlsx) and generate a clean, paginated PDF report listing those comments with context (sheet name, cell address, author). This is useful for reviewers, audit trails, or sharing feedback from spreadsheets in a printable format.
+A GUI-based utility to add comments from an Excel file to PDF documents. The tool searches for specific tags in PDF files and adds annotations with corresponding comments at those locations.
 
 ## Features
-- Extracts cell comments and notes from .xlsx files
-- Includes comment context: sheet name, cell address, author, and timestamp (when available)
-- Outputs a well-formatted, paginated PDF report
-- Basic filtering and sorting options (e.g., by sheet, author, or date)
-- Example scripts and sample workbooks included (if present in the repo)
+- **Fully GUI-based interface** - No command-line arguments needed
+- **Batch processing** - Process multiple PDF files in a folder at once
+- **Configurable annotation distance** - Set the spacing between tags and annotations via GUI
+- **Same-folder output** - Annotated PDFs are saved in the same location as input files with "updated_" prefix
+- **Customizable comment subject** - Set the subject for annotations
+- **Excel-driven annotations** - Define tags and comments in a simple Excel spreadsheet
 
 ## Requirements
 - Python 3.8+ recommended
-- pip for installing dependencies
-
-If the repository includes a requirements.txt, install dependencies with:
-```
-pip install -r requirements.txt
-```
-
-Common libraries you might expect:
+- PyMuPDF (fitz)
+- pandas
 - openpyxl (for reading .xlsx files)
-- reportlab or fpdf2 (for PDF generation)
-- pillow (optional, for handling images)
+- tkinter (usually included with Python)
 
 ## Installation
 1. Clone the repository:
-```
+```bash
 git clone https://github.com/apkarthik1986/CommentPdfFromExcel.git
 cd CommentPdfFromExcel
 ```
-2. Install dependencies:
+
+2. Install required dependencies:
+```bash
+pip install PyMuPDF pandas openpyxl
 ```
-pip install -r requirements.txt
-```
-(If there's no requirements.txt, install the needed packages individually, e.g. `pip install openpyxl reportlab`.)
 
 ## Usage
-Run the provided script to generate a PDF from an Excel file. Example:
-```
-python extract_comments.py input.xlsx -o comments.pdf
-```
-Notes:
-- Replace `extract_comments.py` with the actual script/module name if different.
-- Use `-h` or `--help` (e.g., `python extract_comments.py -h`) to view available CLI options such as filtering, sorting, or page templates.
-- If the repository exposes a package entry point or a different CLI, follow that pattern instead.
 
-Example command with filters (example flags; adjust to the repo's actual CLI):
-```
-python extract_comments.py input.xlsx --sheet "Sheet1" --author "Alice" -o comments.pdf
+### Excel File Format
+Create an Excel file (.xlsx or .xls) with the following columns:
+- **tag**: The text to search for in the PDF
+- **comment**: The annotation text to add next to the tag
+
+Example:
+
+| tag     | comment                   |
+|---------|---------------------------|
+| REF-001 | This is a reference point |
+| NOTE-A  | Important section         |
+
+### Running the Application
+Simply run the script:
+```bash
+python CommentPdf.py
 ```
 
-## File structure (example)
-- extract_comments.py      # Main script that reads .xlsx and writes a PDF
-- README.md               # This file
-- requirements.txt        # Python dependencies (if applicable)
-- examples/               # Example workbooks and generated PDFs
-- tests/                  # Unit tests (if present)
-- docs/                   # Additional documentation (if present)
+The application will guide you through the following steps via GUI dialogs:
 
-Adjust this section to match the repository's actual layout.
+1. **Select Excel File** - Choose your Excel file containing tags and comments
+2. **Select PDF Folder** - Choose the folder containing PDF files to annotate
+3. **Enter Comment Subject** - Specify the subject for annotations (default: "Comment")
+4. **Enter Annotation Distance** - Set the distance in points between tags and annotations (default: 10)
 
-## Examples
-Include sample input files and generated PDFs under `examples/` so users can quickly test functionality:
-- examples/sample.xlsx -> examples/sample_comments.pdf
+### Output
+- Annotated PDF files are saved in the **same folder** as the input PDFs
+- Output files are prefixed with "updated_" (e.g., `document.pdf` → `updated_document.pdf`)
+- Original PDF files remain unchanged
 
-## Configuration
-If the tool supports a config file (YAML/JSON) or environment variables, document the keys and examples here. Example:
-```
-# config.yml
-output:
-  page_size: A4
-  font: "Helvetica"
-filters:
-  include_empty_comments: false
-```
+## Configuration Options
+
+### Annotation Distance
+- Controls the horizontal spacing between the found tag and the annotation box
+- Measured in points (1 point ≈ 1/72 inch)
+- Default value: 10 points
+- Can be left empty to use the default value
+- Must be a non-negative integer
+
+### Comment Subject
+- Sets the subject field for all annotations
+- Default value: "Comment"
+- Can be customized for different annotation categories
+
+## Example Workflow
+1. Prepare an Excel file with your tags and comments
+2. Run `python CommentPdf.py`
+3. Select your Excel file when prompted
+4. Select the folder containing your PDF files
+5. Enter comment subject (or press Enter for default)
+6. Enter annotation distance (or press Enter for default value of 10)
+7. Wait for processing to complete
+8. Find annotated PDFs with "updated_" prefix in the same folder
+
+## Notes
+- The tool searches for exact text matches of tags in PDF content
+- Each occurrence of a tag will receive an annotation
+- Annotations appear as yellow text boxes with dashed borders
+- All PDFs in the selected folder will be processed automatically
+
+## Troubleshooting
+- **No PDF files found**: Ensure your folder contains .pdf files
+- **Tag not found**: Verify the tag text exactly matches text in the PDF
+- **Excel read error**: Ensure your Excel file has 'tag' and 'comment' columns
+- **Permission error**: Ensure you have write permissions in the PDF folder
 
 ## Contributing
 Contributions, issues, and feature requests are welcome. To contribute:
@@ -82,29 +104,8 @@ Contributions, issues, and feature requests are welcome. To contribute:
 3. Make your changes and add tests where applicable
 4. Open a pull request describing your changes
 
-Please follow any contribution guidelines or templates present in the repo.
-
-## Testing
-If tests are included, run them with:
-```
-pytest
-```
-(or use the project’s preferred test runner/command)
-
 ## License
-Specify the project license here (e.g., MIT). If a LICENSE file exists in this repository, reference it:
-```
-This project is licensed under the MIT License - see the LICENSE file for details.
-```
-
-## Troubleshooting & Tips
-- If comments do not appear, verify whether they are stored as "notes" vs "comments" in the Excel file format—different Excel versions store them differently.
-- Large workbooks may require more time/memory; try filtering by sheet or author to reduce output size.
-- For non-ASCII authors or text, ensure the selected PDF font supports the characters you need.
+This project is open source. Please check the repository for license details.
 
 ## Contact / Support
 For questions or help, open an issue on this repository or contact the maintainer: apkarthik1986
-
----
-
-If you'd like any adjustments (badges, CI status, exact script names, or improved examples), tell me what to change and I'll update the README content. When you're ready for me to apply this change to the repository, approve this content and I will commit it.

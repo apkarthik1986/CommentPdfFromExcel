@@ -4,7 +4,7 @@ import os
 from tkinter import Tk, messagebox, simpledialog
 from tkinter.filedialog import askopenfilename, askdirectory
 
-def update_pdf_with_comments(pdf_path, excel_path, output_pdf_path, subject="Comment"):
+def update_pdf_with_comments(pdf_path, excel_path, output_pdf_path, subject="Comment", distance=10):
     # Read the Excel file
     df = pd.read_excel(excel_path)
     df['tag'] = df['tag'].astype(str)
@@ -28,8 +28,8 @@ def update_pdf_with_comments(pdf_path, excel_path, output_pdf_path, subject="Com
                     width = len(comment) * 5.5 + 20
                     height = 20
 
-                    # Position comment box to the right of the tag #inst.x1 + 0 for Elevation
-                    rect = fitz.Rect(inst.x1 + 0, inst.y0 , inst.x1 + 10 + width, inst.y0 + height )
+                    # Position comment box to the right of the tag using dynamic distance
+                    rect = fitz.Rect(inst.x1 + 0, inst.y0 , inst.x1 + distance + width, inst.y0 + height )
 
                     # Add horizontal free text annotation
                     annot = page.add_freetext_annot(
@@ -47,11 +47,7 @@ def update_pdf_with_comments(pdf_path, excel_path, output_pdf_path, subject="Com
     doc.save(output_pdf_path)
     doc.close()
 
-def process_folder(folder_path, excel_path, output_folder, subject="Comment"):
-    # Create output folder if it doesn't exist
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-    
+def process_folder(folder_path, excel_path, subject="Comment", distance=10):
     # Get all PDF files in the folder
     pdf_files = [f for f in os.listdir(folder_path) if f.lower().endswith('.pdf')]
     
@@ -62,14 +58,34 @@ def process_folder(folder_path, excel_path, output_folder, subject="Comment"):
     for pdf_file in pdf_files:
         try:
             pdf_path = os.path.join(folder_path, pdf_file)
-            output_pdf_path = os.path.join(output_folder, f"updated_{pdf_file}")
+            # Save in the same folder with "updated_" prefix
+            output_pdf_path = os.path.join(folder_path, f"updated_{pdf_file}")
             
-            update_pdf_with_comments(pdf_path, excel_path, output_pdf_path, subject)
+            update_pdf_with_comments(pdf_path, excel_path, output_pdf_path, subject, distance)
         except Exception as e:
             messagebox.showerror("Error", f"Failed to process {pdf_file}:\n{e}")
             continue
     
-    messagebox.showinfo("Success", f"Processed {len(pdf_files)} PDF files.\nSaved in: {output_folder}")
+    messagebox.showinfo("Success", f"Processed {len(pdf_files)} PDF files.\nSaved in the same folder as input PDFs.")
+
+def get_annotation_distance():
+    """Show a dialog to get annotation distance from user."""
+    distance_str = simpledialog.askstring(
+        "Annotation Distance",
+        "Enter the distance between tag and annotation (in points):\n(Default: 10)"
+    )
+    # If user cancels or provides empty string, use default
+    if not distance_str or distance_str.strip() == "":
+        return 10
+    try:
+        distance = int(distance_str)
+        if distance < 0:
+            messagebox.showwarning("Warning", "Distance cannot be negative. Using default value of 10.")
+            return 10
+        return distance
+    except ValueError:
+        messagebox.showwarning("Warning", "Invalid input. Using default value of 10.")
+        return 10
 
 def get_comment_subject():
     """Show a dialog to get comment subject from user."""
@@ -98,15 +114,13 @@ def main():
         if not folder_path:
             return
 
-        # Ask for output folder
-        output_folder = askdirectory(title="Select Output Folder")
-        if not output_folder:
-            return
-
         # Ask for comment subject
         subject = get_comment_subject()
 
-        process_folder(folder_path, excel_path, output_folder, subject)
+        # Ask for annotation distance
+        distance = get_annotation_distance()
+
+        process_folder(folder_path, excel_path, subject, distance)
         
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred:\n{e}")
