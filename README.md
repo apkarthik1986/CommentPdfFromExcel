@@ -12,10 +12,13 @@ A GUI-based utility to add comments from an Excel file to PDF documents. The too
 
 ## Requirements
 - Python 3.8+ recommended
-- PyMuPDF (fitz)
-- pandas
-- openpyxl (for reading .xlsx files)
-- tkinter (usually included with Python)
+- PyMuPDF (fitz) - PDF manipulation library
+- pandas - Data processing and Excel file reading
+- openpyxl - Reading modern Excel files (.xlsx format)
+- xlrd - Reading older Excel files (.xls format)
+- Pillow - Optional but recommended for preview mode and accurate text measurements
+- numpy - Data processing (dependency of pandas)
+- tkinter - GUI framework (usually included with Python)
 
 ## Installation
 1. Clone the repository:
@@ -26,8 +29,15 @@ cd CommentPdfFromExcel
 
 2. Install required dependencies:
 ```bash
-pip install PyMuPDF pandas openpyxl
+pip install -r requirements.txt
 ```
+
+   Or install packages individually:
+```bash
+pip install PyMuPDF pandas Pillow openpyxl xlrd numpy
+```
+
+   **Note:** Pillow is optional but highly recommended for the preview feature and accurate text measurements.
 
 ## Usage
 
