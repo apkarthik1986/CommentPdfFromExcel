@@ -1,8 +1,8 @@
 import fitz  # PyMuPDF
 import pandas as pd
 import os
-from tkinter import Tk, messagebox, simpledialog, Label, Entry, Button, Frame, TOP, BOTH, LEFT, RIGHT
-from tkinter.filedialog import askopenfilename, askdirectory, asksaveasfilename
+from tkinter import Tk, messagebox, simpledialog
+from tkinter.filedialog import askopenfilename, askdirectory
 
 def update_pdf_with_comments(pdf_path, excel_path, output_pdf_path, subject="Comment"):
     # Read the Excel file
