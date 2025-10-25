@@ -96,6 +96,7 @@ The application will guide you through the following steps via GUI dialogs:
 - **Tag not found**: Verify the tag text exactly matches text in the PDF
 - **Excel read error**: Ensure your Excel file has 'tag' and 'comment' columns
 - **Permission error**: Ensure you have write permissions in the PDF folder
+- **Comment out of page issue**: If comments go out of page, postion of comments maybe anywhere in page, but horizontally aligned. This is a known issue. <Not corrected>
 
 ## Contributing
 Contributions, issues, and feature requests are welcome. To contribute:
