@@ -59,8 +59,9 @@ def compute_text_size_points(text, fontsize, ttf_candidates=None, pdf_fontname="
     # 3) heuristic defaults (conservative estimates to avoid clipping)
     approx_w = max(10.0, len(text) * (fontsize * 0.6))
     approx_h = max(12.0, fontsize * 1.2)
-    approx_ascent = approx_h * 0.75
-    approx_descent = approx_h * 0.25
+    # Typography conventions: ascent ≈ 0.8 of font size, descent ≈ 0.2
+    approx_ascent = fontsize * 0.8
+    approx_descent = fontsize * 0.2
 
     # 1) try fitz.get_text_length with pdf_fontname (preferred)
     try:
@@ -71,9 +72,9 @@ def compute_text_size_points(text, fontsize, ttf_candidates=None, pdf_fontname="
             # add a safety margin (5%) to avoid clipping when viewer metrics differ slightly
             w = float(w) * 1.05
             h = float(max(12.0, fontsize * 1.2))
-            # Use consistent ratios that sum to 1.0
-            ascent = h * 0.75
-            descent = h * 0.25
+            # Typography conventions: ascent ≈ 0.8 of font size, descent ≈ 0.2
+            ascent = fontsize * 0.8
+            descent = fontsize * 0.2
             return float(w), h, ascent, descent
     except Exception:
         # not available or failed -> continue to Pillow fallback
