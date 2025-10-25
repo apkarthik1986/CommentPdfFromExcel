@@ -92,9 +92,15 @@ def compute_text_size_points(text, fontsize, ttf_candidates=None, pdf_fontname="
                     font = None
         if font is None:
             try:
-                font = ImageFont.truetype("DejaVuSans.ttf", size=int(fontsize))
+                font = ImageFont.truetype("arial.ttf", size=int(fontsize))
             except Exception:
-                font = ImageFont.load_default()
+                try:
+                    font = ImageFont.truetype("Arial.ttf", size=int(fontsize))
+                except Exception:
+                    try:
+                        font = ImageFont.truetype("DejaVuSans.ttf", size=int(fontsize))
+                    except Exception:
+                        font = ImageFont.load_default()
 
         try:
             # create a temp image large enough to measure
@@ -127,7 +133,7 @@ def update_pdf_with_comments(
     subject="Comment",
     distance=10,
     log_func=None,
-    font_family="DejaVuSans",
+    font_family="Arial",
     font_size=12,
 ):
     """
@@ -138,10 +144,11 @@ def update_pdf_with_comments(
         log_func(f"Processing: {os.path.basename(pdf_path)}")
 
     # Map to PDF font resource and ttf candidates for measurement/preview
-    pdf_fontname, ttf_candidates = PDF_FONT_MAP.get(font_family, ("helv", ["DejaVuSans.ttf"]))
+    pdf_fontname, ttf_candidates = PDF_FONT_MAP.get(font_family, ("helv", ["arial.ttf", "Arial.ttf", "DejaVuSans.ttf"]))
 
     doc = fitz.open(pdf_path)
 
+    annotation_count = 0
     for page_num in range(len(doc)):
         page = doc[page_num]
         content = page.get_text("text")
@@ -240,9 +247,10 @@ def update_pdf_with_comments(
                             pass
 
                         annot.update()
+                        annotation_count += 1
                         if log_func:
                             log_func(
-                                f"  Added freetext annot on page {page_num+1} at {rect} (font={pdf_fontname}, size={font_size})"
+                                f"  Added freetext annot on page {page_num+1} at {rect} (font={font_family}, size={font_size})"
                             )
                     except Exception as e:
                         if log_func:
@@ -252,7 +260,7 @@ def update_pdf_with_comments(
     doc.save(output_pdf_path)
     doc.close()
     if log_func:
-        log_func(f"Saved: {os.path.basename(output_pdf_path)}")
+        log_func(f"Saved: {os.path.basename(output_pdf_path)} (Total annotations: {annotation_count})")
 
 
 def process_files(
@@ -262,7 +270,7 @@ def process_files(
     subject="Comment",
     distance=10,
     log_func=None,
-    font_family="DejaVuSans",
+    font_family="Arial",
     font_size=12,
 ):
     try:
@@ -280,7 +288,8 @@ def process_files(
 
     for pdf_path in pdf_paths:
         base = os.path.basename(pdf_path)
-        output_pdf_path = os.path.join(output_folder, f"updated_{base}")
+        name, ext = os.path.splitext(base)
+        output_pdf_path = os.path.join(output_folder, f"{name}_marked{ext}")
         try:
             update_pdf_with_comments(
                 pdf_path,
@@ -324,7 +333,7 @@ def get_text_size(draw, text, font):
         return (len(text) * 7, int(getattr(font, "size", 12)))
 
 
-def build_annotations_for_preview(page, df, distance, font_family="DejaVuSans", font_size=12):
+def build_annotations_for_preview(page, df, distance, font_family="Arial", font_size=12):
     annotations = []
     content = page.get_text("text")
 
@@ -458,7 +467,7 @@ def show_preview_snippet(parent, pdf_path, df, subject, distance, font_family, f
     draw = ImageDraw.Draw(snippet)
 
     # Load font at scaled size so preview shows correct visual size
-    _, ttf_candidates = PDF_FONT_MAP.get(font_family, ("helv", ["DejaVuSans.ttf"]))
+    _, ttf_candidates = PDF_FONT_MAP.get(font_family, ("helv", ["arial.ttf", "Arial.ttf", "DejaVuSans.ttf"]))
     font_obj = None
     for fn in ttf_candidates:
         try:
@@ -468,9 +477,15 @@ def show_preview_snippet(parent, pdf_path, df, subject, distance, font_family, f
             font_obj = None
     if font_obj is None:
         try:
-            font_obj = ImageFont.truetype("DejaVuSans.ttf", size=int(font_size * zoom))
+            font_obj = ImageFont.truetype("arial.ttf", size=int(font_size * zoom))
         except Exception:
-            font_obj = ImageFont.load_default()
+            try:
+                font_obj = ImageFont.truetype("Arial.ttf", size=int(font_size * zoom))
+            except Exception:
+                try:
+                    font_obj = ImageFont.truetype("DejaVuSans.ttf", size=int(font_size * zoom))
+                except Exception:
+                    font_obj = ImageFont.load_default()
 
     r_ax0 = x0 - cx0
     r_ay0 = y0 - cy0
@@ -488,15 +503,6 @@ def show_preview_snippet(parent, pdf_path, df, subject, distance, font_family, f
     except Exception:
         draw.rectangle([r_ax0, r_ay0, r_ax1, r_ay1], outline=(0, 0, 0))
     draw.rectangle([r_ix0, r_iy0, r_ix1, r_iy1], outline=(0, 120, 200), width=2)
-
-    # Draw tag label scaled
-    tag_text = f"[tag] {tag}"
-    tw, th = get_text_size(draw, tag_text, font_obj)
-    tx = r_ix0
-    ty = r_iy0 - th - int(4 * zoom)
-    if ty < 0:
-        ty = r_iy1 + int(4 * zoom)
-    draw.text((tx, ty), tag_text, fill=(0, 0, 0), font=font_obj)
 
     # Draw full comment text (no trimming, no wrapping). The annotation RECT is sized to fit.
     draw.text((r_ax0 + int(3 * zoom), r_ay0 + int(2 * zoom)), comment, fill=(0, 0, 0), font=font_obj)
@@ -549,7 +555,7 @@ def show_preview_snippet(parent, pdf_path, df, subject, distance, font_family, f
 
 
 # ---------- GUI Application ----------
-FONT_CHOICES = ["DejaVuSans", "Arial", "Times New Roman", "Courier"]
+FONT_CHOICES = ["Arial", "DejaVuSans", "Times New Roman", "Courier"]
 
 
 class App(Frame):
@@ -566,7 +572,7 @@ class App(Frame):
         self.output_folder = ""
         self.subject = StringVar(value="Comment")
         self.distance = IntVar(value=10)
-        self.font_family = StringVar(value=FONT_CHOICES[0])
+        self.font_family = StringVar(value="Arial")
         self.font_size = IntVar(value=12)
 
         self.preview_button = None
@@ -688,7 +694,10 @@ class App(Frame):
             if files:
                 self.pdf_paths = list(files)
                 self.input_entry.delete(0, END)
-                self.input_entry.insert(0, ", ".join([os.path.basename(p) for p in self.pdf_paths]))
+                if len(self.pdf_paths) == 1:
+                    self.input_entry.insert(0, self.pdf_paths[0])
+                else:
+                    self.input_entry.insert(0, "; ".join(self.pdf_paths))
                 self.append_log(f"Selected {len(self.pdf_paths)} PDF(s).")
 
     def browse_output(self):
@@ -749,7 +758,7 @@ class App(Frame):
             return
 
         subj = self.subject_entry.get().strip() or "Comment"
-        ffamily = self.font_family.get() or "DejaVuSans"
+        ffamily = self.font_family.get() or "Arial"
 
         self.disable_ui()
         self.append_log("Starting processing...")
@@ -819,7 +828,7 @@ class App(Frame):
         except Exception:
             fsize = 12
 
-        ffamily = self.font_family.get() or "DejaVuSans"
+        ffamily = self.font_family.get() or "Arial"
         subj = self.subject_entry.get().strip() or "Comment"
 
         self.append_log(f"Showing preview snippet for: {os.path.basename(sample_pdf)}")
