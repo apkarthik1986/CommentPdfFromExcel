@@ -160,7 +160,7 @@ def update_pdf_with_comments(
             if not tag or tag.strip() == "":
                 continue
 
-            if tag in content:
+            if tag.lower() in content.lower():
                 text_instances = page.search_for(tag)
                 for inst in text_instances:
                     # Measure comment text in points using fitz metrics first (pdf_fontname), then PIL fallback
@@ -345,7 +345,7 @@ def build_annotations_for_preview(page, df, distance, font_family="Arial", font_
         if not tag or tag.strip() == "":
             continue
 
-        if tag in content:
+        if tag.lower() in content.lower():
             text_instances = page.search_for(tag)
             for inst in text_instances:
                 text_w_pts, text_h_pts, ascent_pts, descent_pts = compute_text_size_points(
