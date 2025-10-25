@@ -37,10 +37,11 @@ Create an Excel file (.xlsx or .xls) with the following columns:
 - **comment**: The annotation text to add next to the tag
 
 Example:
-| tag | comment |
-|-----|---------|
+
+| tag     | comment                   |
+|---------|---------------------------|
 | REF-001 | This is a reference point |
-| NOTE-A | Important section |
+| NOTE-A  | Important section         |
 
 ### Running the Application
 Simply run the script:

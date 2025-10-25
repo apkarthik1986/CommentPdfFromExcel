@@ -72,8 +72,7 @@ def get_annotation_distance():
     """Show a dialog to get annotation distance from user."""
     distance_str = simpledialog.askstring(
         "Annotation Distance",
-        "Enter the distance between tag and annotation (in points):\n(Leave empty for default value of 10)",
-        initialvalue="10"
+        "Enter the distance between tag and annotation (in points):\n(Default: 10)"
     )
     # If user cancels or provides empty string, use default
     if not distance_str or distance_str.strip() == "":
