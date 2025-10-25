@@ -58,7 +58,7 @@ The application will guide you through the following steps via GUI dialogs:
 
 ### Output
 - Annotated PDF files are saved in the **same folder** as the input PDFs
-- Output files are prefixed with "updated_" (e.g., `document.pdf` → `updated_document.pdf`)
+- Output files have "_marked" suffix (e.g., `document.pdf` → `document_marked.pdf`)
 - Original PDF files remain unchanged
 
 ## Configuration Options
@@ -83,7 +83,7 @@ The application will guide you through the following steps via GUI dialogs:
 5. Enter comment subject (or press Enter for default)
 6. Enter annotation distance (or press Enter for default value of 10)
 7. Wait for processing to complete
-8. Find annotated PDFs with "updated_" prefix in the same folder
+8. Find annotated PDFs with "_marked" suffix in the same folder
 
 ## Notes
 - The tool searches for exact text matches of tags in PDF content

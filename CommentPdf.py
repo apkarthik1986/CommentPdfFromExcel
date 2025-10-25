@@ -142,6 +142,7 @@ def update_pdf_with_comments(
 
     doc = fitz.open(pdf_path)
 
+    annotation_count = 0
     for page_num in range(len(doc)):
         page = doc[page_num]
         content = page.get_text("text")
@@ -240,9 +241,10 @@ def update_pdf_with_comments(
                             pass
 
                         annot.update()
+                        annotation_count += 1
                         if log_func:
                             log_func(
-                                f"  Added freetext annot on page {page_num+1} at {rect} (font={pdf_fontname}, size={font_size})"
+                                f"  Added freetext annot on page {page_num+1} at {rect} (font={font_family}, size={font_size})"
                             )
                     except Exception as e:
                         if log_func:
@@ -252,7 +254,7 @@ def update_pdf_with_comments(
     doc.save(output_pdf_path)
     doc.close()
     if log_func:
-        log_func(f"Saved: {os.path.basename(output_pdf_path)}")
+        log_func(f"Saved: {os.path.basename(output_pdf_path)} (Total annotations: {annotation_count})")
 
 
 def process_files(
@@ -280,7 +282,8 @@ def process_files(
 
     for pdf_path in pdf_paths:
         base = os.path.basename(pdf_path)
-        output_pdf_path = os.path.join(output_folder, f"updated_{base}")
+        name, ext = os.path.splitext(base)
+        output_pdf_path = os.path.join(output_folder, f"{name}_marked{ext}")
         try:
             update_pdf_with_comments(
                 pdf_path,
@@ -489,15 +492,6 @@ def show_preview_snippet(parent, pdf_path, df, subject, distance, font_family, f
         draw.rectangle([r_ax0, r_ay0, r_ax1, r_ay1], outline=(0, 0, 0))
     draw.rectangle([r_ix0, r_iy0, r_ix1, r_iy1], outline=(0, 120, 200), width=2)
 
-    # Draw tag label scaled
-    tag_text = f"[tag] {tag}"
-    tw, th = get_text_size(draw, tag_text, font_obj)
-    tx = r_ix0
-    ty = r_iy0 - th - int(4 * zoom)
-    if ty < 0:
-        ty = r_iy1 + int(4 * zoom)
-    draw.text((tx, ty), tag_text, fill=(0, 0, 0), font=font_obj)
-
     # Draw full comment text (no trimming, no wrapping). The annotation RECT is sized to fit.
     draw.text((r_ax0 + int(3 * zoom), r_ay0 + int(2 * zoom)), comment, fill=(0, 0, 0), font=font_obj)
 
@@ -549,7 +543,7 @@ def show_preview_snippet(parent, pdf_path, df, subject, distance, font_family, f
 
 
 # ---------- GUI Application ----------
-FONT_CHOICES = ["DejaVuSans", "Arial", "Times New Roman", "Courier"]
+FONT_CHOICES = ["Arial", "DejaVuSans", "Times New Roman", "Courier"]
 
 
 class App(Frame):
@@ -566,7 +560,7 @@ class App(Frame):
         self.output_folder = ""
         self.subject = StringVar(value="Comment")
         self.distance = IntVar(value=10)
-        self.font_family = StringVar(value=FONT_CHOICES[0])
+        self.font_family = StringVar(value="Arial")
         self.font_size = IntVar(value=12)
 
         self.preview_button = None
@@ -688,7 +682,10 @@ class App(Frame):
             if files:
                 self.pdf_paths = list(files)
                 self.input_entry.delete(0, END)
-                self.input_entry.insert(0, ", ".join([os.path.basename(p) for p in self.pdf_paths]))
+                if len(self.pdf_paths) == 1:
+                    self.input_entry.insert(0, self.pdf_paths[0])
+                else:
+                    self.input_entry.insert(0, "; ".join(self.pdf_paths))
                 self.append_log(f"Selected {len(self.pdf_paths)} PDF(s).")
 
     def browse_output(self):
