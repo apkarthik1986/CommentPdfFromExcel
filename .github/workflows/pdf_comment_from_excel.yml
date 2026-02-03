@@ -1,0 +1,53 @@
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_name:
+        description: 'Base name for the produced artifact (zip)'
+        required: false
+        default: 'pdf_comment_from_excel'
+      build_command:
+        description: 'PowerShell build command to run (single line). Example: go build -ldflags "-s -w" -o ./dist/myapp.exe ./cmd/myapp'
+        required: false
+        default: 'go build -ldflags "-s -w" -o ./dist/myapp.exe ./cmd/myapp'
+      dist_path:
+        description: 'Files/glob to package (relative). Example: ./dist/* or ./dist/myapp.exe'
+        required: false
+        default: './dist/*'
+
+name: Manual Build — pdf_comment_from_excel
+env:
+  ARTIFACT_SUFFIX: ${{ github.sha }}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare dist dir (optional)
+        shell: pwsh
+        run: |
+          if (!(Test-Path -Path ./dist)) { New-Item -ItemType Directory -Path ./dist | Out-Null }
+
+      - name: Run build command
+        shell: pwsh
+        run: |
+          $cmd = '${{ github.event.inputs.build_command }}'
+          Write-Host "Running build command: $cmd"
+          Invoke-Expression $cmd
+
+      - name: Create artifact zip
+        shell: pwsh
+        env:
+          ARTIFACT_NAME: '${{ github.event.inputs.artifact_name }}-${{ env.ARTIFACT_SUFFIX }}.zip'
+          DIST_GLOB: '${{ github.event.inputs.dist_path }}'
+        run: |
+          Write-Host "Packaging $env:DIST_GLOB -> $env:ARTIFACT_NAME"
+          Compress-Archive -Path $env:DIST_GLOB -DestinationPath $env:ARTIFACT_NAME -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf_comment_from_excel
+          path: ${{ env.ARTIFACT_NAME }}
