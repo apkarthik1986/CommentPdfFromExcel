@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import io
 import threading
+import re
 from tkinter import (
     Tk,
     StringVar,
@@ -11,6 +12,7 @@ from tkinter import (
     Entry,
     Button,
     Radiobutton,
+    Checkbutton,
     Text,
     OptionMenu,
     END,
@@ -126,6 +128,7 @@ def compute_text_size_points(text, fontsize, ttf_candidates=None, pdf_fontname="
     # fallback heuristic
     return approx_w, approx_h, approx_ascent, approx_descent
 
+
 def update_pdf_with_comments(
     pdf_path,
     df,
@@ -135,132 +138,212 @@ def update_pdf_with_comments(
     log_func=None,
     font_family="Arial",
     font_size=12,
+    case_sensitive=False,
+    whole_word=False,
+    use_regex=False,
 ):
     """
     Create freetext annotations (editable) and size them to the measured text metrics
     so the box fits the entire comment horizontally (no wrapping).
+
+    Matching options:
+      - case_sensitive: when False (default) matching is case-insensitive
+      - whole_word: when True use word-boundary matching
+      - use_regex: when True interpret tag as a regular expression
     """
     if log_func:
         log_func(f"Processing: {os.path.basename(pdf_path)}")
 
     # Map to PDF font resource and ttf candidates for measurement/preview
-    pdf_fontname, ttf_candidates = PDF_FONT_MAP.get(font_family, ("helv", ["arial.ttf", "Arial.ttf", "DejaVuSans.ttf"]))
+    pdf_fontname, ttf_candidates = PDF_FONT_MAP.get(
+        font_family, ("helv", ["arial.ttf", "Arial.ttf", "DejaVuSans.ttf"])
+    )
 
-    doc = fitz.open(pdf_path)
+    try:
+        doc = fitz.open(pdf_path)
+    except Exception as e:
+        if log_func:
+            log_func(f"  Error opening PDF: {e}")
+        return
 
     annotation_count = 0
     for page_num in range(len(doc)):
         page = doc[page_num]
-        content = page.get_text("text")
+        page_text = page.get_text("text")
 
         for index, row in df.iterrows():
-            tag = str(row["tag"])
-            comment = str(row["comment"])
+            tag = str(row["tag"]) if not pd.isna(row["tag"]) else ""
+            comment = str(row["comment"]) if not pd.isna(row["comment"]) else ""
 
             if not tag or tag.strip() == "":
                 continue
 
-            if tag.lower() in content.lower():
-                text_instances = page.search_for(tag)
-                for inst in text_instances:
-                    # Measure comment text in points using fitz metrics first (pdf_fontname), then PIL fallback
-                    text_w_pts, text_h_pts, ascent_pts, descent_pts = compute_text_size_points(
-                        comment, font_size, ttf_candidates, pdf_fontname
-                    )
+            # Determine matches and their rectangles (best-effort)
+            rects = []
 
-                    # horizontal and vertical padding to ensure no clipping
-                    padding_x = max(8.0, font_size * 0.5)
-                    padding_y = max(4.0, font_size * 0.25)
+            if use_regex:
+                try:
+                    flags = 0 if case_sensitive else re.IGNORECASE
+                    pattern = re.compile(tag, flags)
+                except re.error as rex:
+                    if log_func:
+                        log_func(f"  Invalid regex for tag '{tag}': {rex}")
+                    # skip this tag
+                    continue
 
-                    width = text_w_pts + 2.0 * padding_x
-                    measured_text_height = ascent_pts + descent_pts if (ascent_pts and descent_pts) else text_h_pts
-                    height = max(12.0, measured_text_height + 2.0 * padding_y)
+                for m in pattern.finditer(page_text):
+                    match_text = m.group(0)
+                    found = page.search_for(match_text)
+                    if not found and not case_sensitive:
+                        # Try common case variants as best-effort
+                        for cand in {match_text.lower(), match_text.upper(), match_text.title()}:
+                            found = page.search_for(cand)
+                            if found:
+                                break
+                    if not found:
+                        if log_func:
+                            log_func(f"  Warning: regex match '{match_text}' could not be mapped to page coordinates.")
+                        continue
+                    rects.extend(found)
 
-                    page_rect = page.rect
-
-                    # Preferred position: to the right of the tag, offset by distance
-                    pref_x0 = inst.x1 + distance
-                    pref_x1 = pref_x0 + width
-
-                    if pref_x1 <= page_rect.x1 - 5:
-                        x0 = pref_x0
-                        x1 = pref_x1
+            else:
+                # Non-regex matching
+                if whole_word:
+                    flags = 0 if case_sensitive else re.IGNORECASE
+                    pattern = re.compile(r"\b" + re.escape(tag) + r"\b", flags)
+                    matches = list(pattern.finditer(page_text))
+                    if not matches:
+                        continue
+                    for m in matches:
+                        matched_text = page_text[m.start(): m.end()]
+                        found = page.search_for(matched_text)
+                        if not found and not case_sensitive:
+                            for cand in {matched_text.lower(), matched_text.upper(), matched_text.title()}:
+                                found = page.search_for(cand)
+                                if found:
+                                    break
+                        if not found:
+                            if log_func:
+                                log_func(f"  Warning: whole-word match '{matched_text}' could not be mapped to page coordinates.")
+                            continue
+                        rects.extend(found)
+                else:
+                    # simple containment (respect case option for detection)
+                    if case_sensitive:
+                        if tag not in page_text:
+                            continue
                     else:
-                        # place left of tag
-                        x1 = inst.x0 - distance
-                        x0 = x1 - width
-                        if x0 < page_rect.x0 + 5:
-                            # clamp and reduce width if necessary
-                            x0 = page_rect.x0 + 5
-                            x1 = min(page_rect.x1 - 5, x0 + width)
+                        if tag.lower() not in page_text.lower():
+                            continue
 
-                    # Vertical placement: center the annotation vertically relative to the tag instance
-                    inst_mid = (inst.y0 + inst.y1) / 2.0
-                    y0 = inst_mid - (height / 2.0)
+                    # Try direct search_for using the literal tag first
+                    found = page.search_for(tag)
+                    if not found and not case_sensitive:
+                        # Try some common variants as a best-effort
+                        for cand in {tag.lower(), tag.upper(), tag.title()}:
+                            found = page.search_for(cand)
+                            if found:
+                                break
+                    if not found:
+                        if log_func:
+                            log_func(f"  Warning: tag '{tag}' found in page text but could not find coordinates (search_for returned empty).")
+                        continue
+                    rects.extend(found)
+
+            # Create annotations for all found rects
+            for inst in rects:
+                text_w_pts, text_h_pts, ascent_pts, descent_pts = compute_text_size_points(
+                    comment, font_size, ttf_candidates, pdf_fontname
+                )
+
+                padding_x = max(8.0, font_size * 0.5)
+                padding_y = max(4.0, font_size * 0.25)
+
+                width = text_w_pts + 2.0 * padding_x
+                measured_text_height = ascent_pts + descent_pts if (ascent_pts and descent_pts) else text_h_pts
+                height = max(12.0, measured_text_height + 2.0 * padding_y)
+
+                page_rect = page.rect
+
+                pref_x0 = inst.x1 + distance
+                pref_x1 = pref_x0 + width
+
+                if pref_x1 <= page_rect.x1 - 5:
+                    x0 = pref_x0
+                    x1 = pref_x1
+                else:
+                    x1 = inst.x0 - distance
+                    x0 = x1 - width
+                    if x0 < page_rect.x0 + 5:
+                        x0 = page_rect.x0 + 5
+                        x1 = min(page_rect.x1 - 5, x0 + width)
+
+                inst_mid = (inst.y0 + inst.y1) / 2.0
+                y0 = inst_mid - (height / 2.0)
+                y1 = y0 + height
+
+                if y0 < page_rect.y0 + 5:
+                    y0 = page_rect.y0 + 5
                     y1 = y0 + height
-
-                    # Clamp to page bounds
+                if y1 > page_rect.y1 - 5:
+                    y1 = page_rect.y1 - 5
+                    y0 = y1 - height
                     if y0 < page_rect.y0 + 5:
                         y0 = page_rect.y0 + 5
-                        y1 = y0 + height
-                    if y1 > page_rect.y1 - 5:
-                        y1 = page_rect.y1 - 5
-                        y0 = y1 - height
-                        if y0 < page_rect.y0 + 5:
-                            y0 = page_rect.y0 + 5
 
-                    rect = fitz.Rect(x0, y0, x1, y1)
+                rect = fitz.Rect(x0, y0, x1, y1)
 
-                    # Create freetext annotation and set font/size; use best-effort methods to influence appearance
+                try:
+                    annot = page.add_freetext_annot(
+                        rect,
+                        comment,
+                        fontsize=font_size,
+                        text_color=(0, 0, 0),
+                        fill_color=(1, 1, 0),
+                        rotate=0,
+                        align=fitz.TEXT_ALIGN_LEFT,
+                    )
+
                     try:
-                        annot = page.add_freetext_annot(
-                            rect,
-                            comment,
-                            fontsize=font_size,
-                            text_color=(0, 0, 0),
-                            fill_color=(1, 1, 0),
-                            rotate=0,
-                            align=fitz.TEXT_ALIGN_LEFT,
-                        )
-
-                        # Best-effort: set annotation font resource name (viewer/PyMuPDF dependent)
+                        annot.set_font(pdf_fontname)
+                    except Exception:
                         try:
-                            annot.set_font(pdf_fontname)
-                        except Exception:
-                            try:
-                                annot.set_font("helv")
-                            except Exception:
-                                pass
-
-                        # set border and colors when available
-                        try:
-                            annot.set_border(width=0.5, dashes=[2])
-                        except Exception:
-                            pass
-                        try:
-                            annot.set_colors(stroke=(0, 0, 0), fill=(1, 1, 0))
-                        except Exception:
-                            pass
-                        try:
-                            annot.set_info({"subject": subject})
+                            annot.set_font("helv")
                         except Exception:
                             pass
 
-                        annot.update()
-                        annotation_count += 1
-                        if log_func:
-                            log_func(
-                                f"  Added freetext annot on page {page_num+1} at {rect} (font={font_family}, size={font_size})"
-                            )
-                    except Exception as e:
-                        if log_func:
-                            log_func(f"  Error creating freetext annot at {rect}: {e}")
+                    try:
+                        annot.set_border(width=0.5, dashes=[2])
+                    except Exception:
+                        pass
+                    try:
+                        annot.set_colors(stroke=(0, 0, 0), fill=(1, 1, 0))
+                    except Exception:
+                        pass
+                    try:
+                        annot.set_info({"subject": subject})
+                    except Exception:
+                        pass
 
-    # Save without flattening so annotations remain editable
-    doc.save(output_pdf_path)
-    doc.close()
+                    annot.update()
+                    annotation_count += 1
+                    if log_func:
+                        log_func(f"  Added freetext annot on page {page_num+1} at {rect} (font={font_family}, size={font_size})")
+                except Exception as e:
+                    if log_func:
+                        log_func(f"  Error creating freetext annot at {rect}: {e}")
+
+    try:
+        doc.save(output_pdf_path)
+    except Exception as e:
+        if log_func:
+            log_func(f"  Error saving PDF: {e}")
+    finally:
+        doc.close()
+
     if log_func:
         log_func(f"Saved: {os.path.basename(output_pdf_path)} (Total annotations: {annotation_count})")
+
 
 def process_files(
     pdf_paths,
@@ -271,6 +354,9 @@ def process_files(
     log_func=None,
     font_family="Arial",
     font_size=12,
+    case_sensitive=False,
+    whole_word=False,
+    use_regex=False,
 ):
     try:
         df = pd.read_excel(excel_path)
@@ -299,6 +385,9 @@ def process_files(
                 log_func=log_func,
                 font_family=font_family,
                 font_size=font_size,
+                case_sensitive=case_sensitive,
+                whole_word=whole_word,
+                use_regex=use_regex,
             )
         except Exception as e:
             if log_func:
@@ -332,68 +421,132 @@ def get_text_size(draw, text, font):
         return (len(text) * 7, int(getattr(font, "size", 12)))
 
 
-def build_annotations_for_preview(page, df, distance, font_family="Arial", font_size=12):
+def build_annotations_for_preview(
+    page,
+    df,
+    distance,
+    font_family="Arial",
+    font_size=12,
+    case_sensitive=False,
+    whole_word=False,
+    use_regex=False,
+):
     annotations = []
-    content = page.get_text("text")
+    page_text = page.get_text("text")
 
     _, ttf_candidates = PDF_FONT_MAP.get(font_family, ("helv", ["DeJaVuSans.ttf"]))
 
     for index, row in df.iterrows():
-        tag = str(row["tag"])
-        comment = str(row["comment"])
+        tag = str(row["tag"]) if not pd.isna(row["tag"]) else ""
+        comment = str(row["comment"]) if not pd.isna(row["comment"]) else ""
         if not tag or tag.strip() == "":
             continue
 
-        if tag.lower() in content.lower():
-            text_instances = page.search_for(tag)
-            for inst in text_instances:
-                text_w_pts, text_h_pts, ascent_pts, descent_pts = compute_text_size_points(
-                    comment, font_size, ttf_candidates, pdf_fontname="helv"
-                )
-                padding_x = max(8.0, font_size * 0.5)
-                padding_y = max(4.0, font_size * 0.25)
-                width = text_w_pts + 2.0 * padding_x
-                measured_text_height = ascent_pts + descent_pts if (ascent_pts and descent_pts) else text_h_pts
-                height = max(12.0, measured_text_height + 2.0 * padding_y)
+        rects = []
 
-                page_rect = page.rect
-                pref_x0 = inst.x1 + distance
-                pref_x1 = pref_x0 + width
+        if use_regex:
+            try:
+                flags = 0 if case_sensitive else re.IGNORECASE
+                pattern = re.compile(tag, flags)
+            except re.error:
+                continue
+            for m in pattern.finditer(page_text):
+                match_text = m.group(0)
+                found = page.search_for(match_text)
+                if not found and not case_sensitive:
+                    for cand in {match_text.lower(), match_text.upper(), match_text.title()}:
+                        found = page.search_for(cand)
+                        if found:
+                            break
+                if not found:
+                    continue
+                rects.extend(found)
 
-                if pref_x1 <= page_rect.x1 - 5:
-                    x0 = pref_x0
-                    x1 = pref_x1
+        else:
+            if whole_word:
+                flags = 0 if case_sensitive else re.IGNORECASE
+                pattern = re.compile(r"\b" + re.escape(tag) + r"\b", flags)
+                matches = list(pattern.finditer(page_text))
+                if not matches:
+                    continue
+                for m in matches:
+                    matched_text = page_text[m.start(): m.end()]
+                    found = page.search_for(matched_text)
+                    if not found and not case_sensitive:
+                        for cand in {matched_text.lower(), matched_text.upper(), matched_text.title()}:
+                            found = page.search_for(cand)
+                            if found:
+                                break
+                    if not found:
+                        continue
+                    rects.extend(found)
+            else:
+                if case_sensitive:
+                    if tag not in page_text:
+                        continue
                 else:
-                    x1 = inst.x0 - distance
-                    x0 = x1 - width
-                    if x0 < page_rect.x0 + 5:
-                        x0 = page_rect.x0 + 5
-                        x1 = min(page_rect.x1 - 5, x0 + width)
+                    if tag.lower() not in page_text.lower():
+                        continue
+                found = page.search_for(tag)
+                if not found and not case_sensitive:
+                    for cand in {tag.lower(), tag.upper(), tag.title()}:
+                        found = page.search_for(cand)
+                        if found:
+                            break
+                if not found:
+                    continue
+                rects.extend(found)
 
-                inst_mid = (inst.y0 + inst.y1) / 2.0
-                y0 = inst_mid - (height / 2.0)
+        for inst in rects:
+            text_w_pts, text_h_pts, ascent_pts, descent_pts = compute_text_size_points(
+                comment, font_size, ttf_candidates, pdf_fontname="helv"
+            )
+            padding_x = max(8.0, font_size * 0.5)
+            padding_y = max(4.0, font_size * 0.25)
+            width = text_w_pts + 2.0 * padding_x
+            measured_text_height = ascent_pts + descent_pts if (ascent_pts and descent_pts) else text_h_pts
+            height = max(12.0, measured_text_height + 2.0 * padding_y)
+
+            page_rect = page.rect
+            pref_x0 = inst.x1 + distance
+            pref_x1 = pref_x0 + width
+
+            if pref_x1 <= page_rect.x1 - 5:
+                x0 = pref_x0
+                x1 = pref_x1
+            else:
+                x1 = inst.x0 - distance
+                x0 = x1 - width
+                if x0 < page_rect.x0 + 5:
+                    x0 = page_rect.x0 + 5
+                    x1 = min(page_rect.x1 - 5, x0 + width)
+
+            inst_mid = (inst.y0 + inst.y1) / 2.0
+            y0 = inst_mid - (height / 2.0)
+            y1 = y0 + height
+            if y0 < page_rect.y0 + 5:
+                y0 = page_rect.y0 + 5
                 y1 = y0 + height
+            if y1 > page_rect.y1 - 5:
+                y1 = page_rect.y1 - 5
+                y0 = y1 - height
                 if y0 < page_rect.y0 + 5:
                     y0 = page_rect.y0 + 5
-                    y1 = y0 + height
-                if y1 > page_rect.y1 - 5:
-                    y1 = page_rect.y1 - 5
-                    y0 = y1 - height
-                    if y0 < page_rect.y0 + 5:
-                        y0 = page_rect.y0 + 5
 
-                annot_rect = fitz.Rect(x0, y0, x1, y1)
-                annotations.append(
-                    {
-                        "annot_rect": annot_rect,
-                        "comment": comment,
-                        "inst_rect": inst,
-                        "tag": tag,
-                    }
-                )
+            annot_rect = fitz.Rect(x0, y0, x1, y1)
+            annotations.append(
+                {
+                    "annot_rect": annot_rect,
+                    "comment": comment,
+                    "inst_rect": inst,
+                    "tag": tag,
+                }
+            )
+
     return annotations
 
-def show_preview_snippet(parent, pdf_path, df, subject, distance, font_family, font_size):
+
+def show_preview_snippet(parent, pdf_path, df, subject, distance, font_family, font_size, case_sensitive=False, whole_word=False, use_regex=False):
     if not PIL_AVAILABLE:
         messagebox.showerror(
             "Preview unavailable",
@@ -418,7 +571,7 @@ def show_preview_snippet(parent, pdf_path, df, subject, distance, font_family, f
 
     for i in range(len(doc)):
         page = doc[i]
-        anns = build_annotations_for_preview(page, df, distance, font_family=font_family, font_size=font_size)
+        anns = build_annotations_for_preview(page, df, distance, font_family=font_family, font_size=font_size, case_sensitive=case_sensitive, whole_word=whole_word, use_regex=use_regex)
         if anns:
             first_found = page
             first_page_index = i
@@ -573,6 +726,11 @@ class App(Frame):
         self.font_family = StringVar(value="Arial")
         self.font_size = IntVar(value=12)
 
+        # Matching options
+        self.case_sensitive = IntVar(value=0)
+        self.whole_word = IntVar(value=0)
+        self.use_regex = IntVar(value=0)
+
         self.preview_button = None
         self.start_button = None
         self.quit_button = None
@@ -632,6 +790,12 @@ class App(Frame):
         Label(self, text="Size:").grid(column=2, row=row, sticky=W, padx=5)
         self.font_size_entry = Entry(self, textvariable=self.font_size, width=6)
         self.font_size_entry.grid(column=3, row=row, sticky=W, padx=5)
+        row += 1
+
+        # Matching option checkbuttons
+        Checkbutton(self, text="Case sensitive", variable=self.case_sensitive).grid(column=0, row=row, sticky=W, padx=5)
+        Checkbutton(self, text="Whole word", variable=self.whole_word).grid(column=1, row=row, sticky=W, padx=5)
+        Checkbutton(self, text="Use regex", variable=self.use_regex).grid(column=2, row=row, sticky=W, padx=5)
         row += 1
 
         self.preview_button = Button(self, text="Preview", command=self.preview_sample, width=12)
@@ -758,18 +922,22 @@ class App(Frame):
         subj = self.subject_entry.get().strip() or "Comment"
         ffamily = self.font_family.get() or "Arial"
 
+        cs = bool(self.case_sensitive.get())
+        ww = bool(self.whole_word.get())
+        ur = bool(self.use_regex.get())
+
         self.disable_ui()
         self.append_log("Starting processing...")
 
         # run processing in background thread
         thread = threading.Thread(
             target=self._process_thread,
-            args=(list(self.pdf_paths), excel, out_folder, subj, dist, ffamily, fsize),
-            daemon=True
+            args=(list(self.pdf_paths), excel, out_folder, subj, dist, ffamily, fsize, cs, ww, ur),
+            daemon=True,
         )
         thread.start()
 
-    def _process_thread(self, pdf_paths, excel, out_folder, subj, dist, ffamily, fsize):
+    def _process_thread(self, pdf_paths, excel, out_folder, subj, dist, ffamily, fsize, cs, ww, ur):
         try:
             process_files(
                 pdf_paths,
@@ -780,11 +948,13 @@ class App(Frame):
                 log_func=self.append_log,
                 font_family=ffamily,
                 font_size=fsize,
+                case_sensitive=cs,
+                whole_word=ww,
+                use_regex=ur,
             )
             # UI interactions must be done on the main thread
             self.root.after(0, lambda: self.append_log("All done."))
-            self.root.after(0, lambda: messagebox.showinfo("Success", f"Processed {len(pdf_paths)} PDF file(s).
-Saved to: {out_folder}"))
+            self.root.after(0, lambda: messagebox.showinfo("Success", f"Processed {len(pdf_paths)} PDF file(s).\nSaved to: {out_folder}"))
         except Exception as e:
             self.root.after(0, lambda: messagebox.showerror("Error", f"An error occurred:\n{e}"))
             self.root.after(0, lambda: self.append_log(f"Error: {e}"))
@@ -841,8 +1011,12 @@ Saved to: {out_folder}"))
         ffamily = self.font_family.get() or "Arial"
         subj = self.subject_entry.get().strip() or "Comment"
 
+        cs = bool(self.case_sensitive.get())
+        ww = bool(self.whole_word.get())
+        ur = bool(self.use_regex.get())
+
         self.append_log(f"Showing preview snippet for: {os.path.basename(sample_pdf)}")
-        show_preview_snippet(self.root, sample_pdf, df, subj, dist, ffamily, fsize)
+        show_preview_snippet(self.root, sample_pdf, df, subj, dist, ffamily, fsize, case_sensitive=cs, whole_word=ww, use_regex=ur)
 
     def disable_ui(self):
         widgets_to_disable = [
