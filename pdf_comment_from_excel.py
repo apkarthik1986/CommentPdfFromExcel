@@ -2,6 +2,7 @@ import fitz  # PyMuPDF
 import pandas as pd
 import os
 import io
+import threading
 from tkinter import (
     Tk,
     StringVar,
@@ -124,7 +125,6 @@ def compute_text_size_points(text, fontsize, ttf_candidates=None, pdf_fontname="
 
     # fallback heuristic
     return approx_w, approx_h, approx_ascent, approx_descent
-
 
 def update_pdf_with_comments(
     pdf_path,
@@ -262,7 +262,6 @@ def update_pdf_with_comments(
     if log_func:
         log_func(f"Saved: {os.path.basename(output_pdf_path)} (Total annotations: {annotation_count})")
 
-
 def process_files(
     pdf_paths,
     excel_path,
@@ -393,7 +392,6 @@ def build_annotations_for_preview(page, df, distance, font_family="Arial", font_
                     }
                 )
     return annotations
-
 
 def show_preview_snippet(parent, pdf_path, df, subject, distance, font_family, font_size):
     if not PIL_AVAILABLE:
@@ -762,9 +760,19 @@ class App(Frame):
 
         self.disable_ui()
         self.append_log("Starting processing...")
+
+        # run processing in background thread
+        thread = threading.Thread(
+            target=self._process_thread,
+            args=(list(self.pdf_paths), excel, out_folder, subj, dist, ffamily, fsize),
+            daemon=True
+        )
+        thread.start()
+
+    def _process_thread(self, pdf_paths, excel, out_folder, subj, dist, ffamily, fsize):
         try:
             process_files(
-                self.pdf_paths,
+                pdf_paths,
                 excel,
                 out_folder,
                 subject=subj,
@@ -773,13 +781,15 @@ class App(Frame):
                 font_family=ffamily,
                 font_size=fsize,
             )
-            self.append_log("All done.")
-            messagebox.showinfo("Success", f"Processed {len(self.pdf_paths)} PDF file(s).\nSaved to: {out_folder}")
+            # UI interactions must be done on the main thread
+            self.root.after(0, lambda: self.append_log("All done."))
+            self.root.after(0, lambda: messagebox.showinfo("Success", f"Processed {len(pdf_paths)} PDF file(s).
+Saved to: {out_folder}"))
         except Exception as e:
-            messagebox.showerror("Error", f"An error occurred:\n{e}")
-            self.append_log(f"Error: {e}")
+            self.root.after(0, lambda: messagebox.showerror("Error", f"An error occurred:\n{e}"))
+            self.root.after(0, lambda: self.append_log(f"Error: {e}"))
         finally:
-            self.enable_ui()
+            self.root.after(0, self.enable_ui)
 
     def preview_sample(self):
         excel = self.excel_entry.get().strip()
