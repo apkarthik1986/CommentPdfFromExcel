@@ -27,7 +27,7 @@ from tkinter import (
     Toplevel,
     NW,
 )
-from tkinter.ttk import Frame
+from tkinter.ttk import Frame, Progressbar
 
 # Pillow is optional but required for preview mode and accurate text metric measurements
 try:
@@ -357,6 +357,7 @@ def process_files(
     case_sensitive=False,
     whole_word=False,
     use_regex=False,
+    progress_callback=None,
 ):
     try:
         df = pd.read_excel(excel_path)
@@ -371,7 +372,8 @@ def process_files(
 
     os.makedirs(output_folder, exist_ok=True)
 
-    for pdf_path in pdf_paths:
+    total = len(pdf_paths) if pdf_paths else 0
+    for idx, pdf_path in enumerate(pdf_paths):
         base = os.path.basename(pdf_path)
         name, ext = os.path.splitext(base)
         output_pdf_path = os.path.join(output_folder, f"{name}_marked{ext}")
@@ -392,7 +394,15 @@ def process_files(
         except Exception as e:
             if log_func:
                 log_func(f"Error processing {base}: {e}")
-            continue
+            # continue to next file
+        finally:
+            # update progress after each file
+            if progress_callback and total > 0:
+                try:
+                    pct = int(((idx + 1) / total) * 100)
+                    progress_callback(pct)
+                except Exception:
+                    pass
 
 
 # ---------- Preview utilities ----------
@@ -734,6 +744,7 @@ class App(Frame):
         self.preview_button = None
         self.start_button = None
         self.quit_button = None
+        self.progress = None
 
         self.create_widgets()
         self.append_log("Ready")
@@ -804,6 +815,11 @@ class App(Frame):
         self.start_button.grid(column=2, row=row, padx=5, pady=10)
         self.quit_button = Button(self, text="Quit", command=self.root.destroy, width=12)
         self.quit_button.grid(column=3, row=row, padx=5, pady=10)
+        row += 1
+
+        # Progress bar (shows progress across selected PDFs)
+        self.progress = Progressbar(self, orient="horizontal", mode="determinate", maximum=100)
+        self.progress.grid(column=0, row=row, columnspan=4, sticky=(W, E), padx=5, pady=(0, 6))
         row += 1
 
         Label(self, text="Log:").grid(column=0, row=row, sticky=NW, padx=5)
@@ -879,6 +895,15 @@ class App(Frame):
         finally:
             self.log.configure(state=DISABLED)
 
+    def set_progress_value(self, val):
+        try:
+            # clamp to [0,100]
+            val = max(0, min(100, int(val)))
+            self.progress['value'] = val
+            self.progress.update_idletasks()
+        except Exception:
+            pass
+
     def start_processing(self):
         excel = self.excel_entry.get().strip()
         if not excel or not os.path.isfile(excel):
@@ -928,6 +953,8 @@ class App(Frame):
 
         self.disable_ui()
         self.append_log("Starting processing...")
+        # reset progress
+        self.set_progress_value(0)
 
         # run processing in background thread
         thread = threading.Thread(
@@ -939,6 +966,13 @@ class App(Frame):
 
     def _process_thread(self, pdf_paths, excel, out_folder, subj, dist, ffamily, fsize, cs, ww, ur):
         try:
+            # progress callback that schedules UI update on main thread
+            def progress_cb(pct):
+                try:
+                    self.root.after(0, lambda: self.set_progress_value(pct))
+                except Exception:
+                    pass
+
             process_files(
                 pdf_paths,
                 excel,
@@ -951,7 +985,10 @@ class App(Frame):
                 case_sensitive=cs,
                 whole_word=ww,
                 use_regex=ur,
+                progress_callback=progress_cb,
             )
+            # ensure progress shows complete
+            self.root.after(0, lambda: self.set_progress_value(100))
             # UI interactions must be done on the main thread
             self.root.after(0, lambda: self.append_log("All done."))
             self.root.after(0, lambda: messagebox.showinfo("Success", f"Processed {len(pdf_paths)} PDF file(s).\nSaved to: {out_folder}"))
