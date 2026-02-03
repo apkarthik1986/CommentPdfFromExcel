@@ -562,7 +562,7 @@ class App(Frame):
     def __init__(self, root):
         Frame.__init__(self, root)
         self.root = root
-        self.root.title("CommentPdfFromExcel_V1.0 By AP.Karthik Technip Chennai")
+        self.root.title("CommentPdfFromExcel_V2.0 By AP.Karthik Technip Chennai")
         self.grid(sticky=(N, S, E, W))
 
         # Data holders
